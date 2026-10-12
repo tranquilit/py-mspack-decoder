@@ -73,9 +73,9 @@ def _same_upn_info(left: dict, right: dict) -> bool:
 
 def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
                *, errors: list[int] | None = None, strict: bool = True,
-               require_logon: bool = False) -> dict:
+               require_logon: bool = False,
+               ignore_invalid_claims: bool = False) -> dict:
     """Decode a raw MS-PAC as a dictionary; **does not authenticate it**.
-
     In strict mode (default), malformed recognized buffers, conflicting
     identity buffers, and missing/invalid LOGON_INFO (when
     ``require_logon=True``) raise PACDecodeError. For buffer types that MS-PAC
@@ -84,18 +84,22 @@ def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
     remain an error because MS-PAC does not specify an ignore rule for them.
     Unknown buffer types are retained as metadata, not interpreted.
     No partial result is returned.
-
     ``strict=False`` is ONLY for offline diagnostics. In this mode malformed
     buffers are skipped and their type IDs are recorded in ``errors``. Its
     output MUST NOT be used for authorization. This is intentionally explicit
     to preserve the older diagnostic API while making normal use fail closed.
-
     ``upn_dns_attribute`` may ONLY come from an *independently authenticated*
     and complete GSSAPI name attribute. The library can't establish trust
     when caller-provided bytes are passed directly to this function.
+
+    ``ignore_invalid_claims=True`` is an explicit compatibility mode: only
+    malformed optional client/device claims (types 13 and 15) are skipped,
+    never identity, logon, group, or other buffers. Missing claims must not
+    be treated as successful claims-based authorization.
     """
-    if type(strict) is not bool or type(require_logon) is not bool:
-        raise TypeError("strict and require_logon must be booleans")
+    if (type(strict) is not bool or type(require_logon) is not bool
+            or type(ignore_invalid_claims) is not bool):
+        raise TypeError("strict, require_logon and ignore_invalid_claims must be booleans")
     pac = parse_pac(raw_pac)
     info = empty_pac_info()
     info["pac_size"] = pac.size
@@ -181,7 +185,7 @@ def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
                 key = "client_claims" if t == 13 else "device_claims"
                 info[key] = decode_claims_info(data)
         except PACDecodeError as exc:
-            if strict:
+            if strict and not (ignore_invalid_claims and t in (13, 15)):
                 raise PACDecodeError(
                     f"invalid PAC {BUFFER_NAMES.get(t, f'buffer {t}')} ({t}): {exc}"
                 ) from exc
