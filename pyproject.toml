@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-mspack-decoder"
+version = "0.1.1"
+description = "Pure-Python Microsoft Kerberos PAC decoder"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Simon Fonteneau" }]
+dependencies = []
+
+[project.optional-dependencies]
+gssapi = ["gssapi>=1.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

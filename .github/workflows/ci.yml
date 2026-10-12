@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install build tools
+        run: python -m pip install --upgrade build
+      - name: Check Python source syntax
+        run: python -m compileall -q src examples
+      - name: Build wheel and sdist
+        run: python -m build
+      - name: Install wheel and check imports
+        shell: bash
+        run: |
+          python -m pip install dist/*.whl
+          cd /tmp
+          python -c "import pac_decoder; from pac_decoder.gssapi_helpers import decode_completed_context; print('Imports OK')"
