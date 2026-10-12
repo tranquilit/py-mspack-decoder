@@ -183,7 +183,11 @@ def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
                 info["pac_signature_types"][SIG_NAMES[t]] = decode_signature_type(data)
             elif t in (13, 15):
                 key = "client_claims" if t == 13 else "device_claims"
-                info[key] = decode_claims_info(data)
+                # Samba and Windows may include a zero-length claims buffer
+                # when there are no claims. There is no NDR envelope to parse.
+                # Keep *_claims_present=True and decoded claims=None.
+                if data:
+                    info[key] = decode_claims_info(data)
         except PACDecodeError as exc:
             if strict and not (ignore_invalid_claims and t in (13, 15)):
                 raise PACDecodeError(
