@@ -1,5 +1,7 @@
 """Specialized NDR32 decoders for PAC_LOGON_INFO and PAC_DEVICE_INFO."""
 
+from __future__ import annotations
+
 from .binary import PACDecodeError, filetime_to_iso, MAX_PAC_ENTRIES, MAX_GROUP_MEMBERSHIPS, MAX_SID_SUBAUTHS
 from .ndr import ndr_serialized_pointer
 

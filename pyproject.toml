@@ -7,7 +7,7 @@ name = "py-mspack-decoder"
 version = "0.1.1"
 description = "Pure-Python Microsoft Kerberos PAC decoder"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 license = "MIT"
 authors = [{ name = "Simon Fonteneau" }]
 dependencies = []

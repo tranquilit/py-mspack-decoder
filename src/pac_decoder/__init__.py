@@ -8,6 +8,8 @@ Security contract:
   rather than returning an incomplete authorization identity.
 * ``strict=False`` is for offline diagnostics ONLY, never authorization.
 """
+
+from __future__ import annotations
 from .binary import (
     PACDecodeError, decode_attributes_info, decode_client_info,
     decode_sid, decode_signature_type, decode_upn_dns_info, parse_pac,

@@ -4,6 +4,8 @@ No Kerberos validation is performed here. Only pass PAC data obtained from an
 *authenticated and complete* GSSAPI name attribute.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import struct

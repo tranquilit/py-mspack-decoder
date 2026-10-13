@@ -5,6 +5,8 @@ pointer/array/string forms used by PAC_LOGON_INFO and PAC_DEVICE_INFO are
 supported. Incoming lengths are bounded before allocation or iteration.
 """
 
+from __future__ import annotations
+
 import struct
 from .binary import PACDecodeError, MAX_PAC_ENTRIES, MAX_PAC_GROUPS, MAX_SID_SUBAUTHS
 
