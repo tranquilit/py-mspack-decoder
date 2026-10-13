@@ -10,6 +10,8 @@ import struct
 
 MAX_PAC_BYTES = 4 * 1024 * 1024
 MAX_PAC_ENTRIES = 16_384
+MAX_PAC_GROUPS = 65_535  # Samba-style per-array group/SID bound.
+MAX_GROUP_MEMBERSHIPS = 200_000  # Maximum number of distinct authorization group SIDs.
 MAX_SID_SUBAUTHS = 15
 
 

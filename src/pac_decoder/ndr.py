@@ -6,7 +6,7 @@ supported. Incoming lengths are bounded before allocation or iteration.
 """
 
 import struct
-from .binary import PACDecodeError, MAX_PAC_ENTRIES, MAX_SID_SUBAUTHS
+from .binary import PACDecodeError, MAX_PAC_ENTRIES, MAX_PAC_GROUPS, MAX_SID_SUBAUTHS
 
 
 class NDRReader:
@@ -63,7 +63,7 @@ class NDRReader:
             raise PACDecodeError("invalid NDR Unicode string") from exc
 
     def group_array(self, referent: int, count: int) -> list[tuple[int, int]]:
-        if count > MAX_PAC_ENTRIES:
+        if count > MAX_PAC_GROUPS:
             raise PACDecodeError("excessive PAC group count")
         if not referent:
             if count:
@@ -87,7 +87,7 @@ class NDRReader:
         return self.sid() if referent else None
 
     def sid_and_attributes_array(self, referent: int, count: int) -> list[tuple[str | None, int]]:
-        if count > MAX_PAC_ENTRIES:
+        if count > MAX_PAC_GROUPS:
             raise PACDecodeError("excessive extra SID count")
         if not referent:
             if count:

@@ -1,10 +1,12 @@
 """Specialized NDR32 decoders for PAC_LOGON_INFO and PAC_DEVICE_INFO."""
 
-from .binary import PACDecodeError, filetime_to_iso, MAX_PAC_ENTRIES
+from .binary import PACDecodeError, filetime_to_iso, MAX_PAC_ENTRIES, MAX_GROUP_MEMBERSHIPS
 from .ndr import ndr_serialized_pointer
 
 _ENABLED = 0x00000004
 _DENY_ONLY = 0x00000010
+_NETLOGON_EXTRA_SIDS = 0x00000020
+_NETLOGON_RESOURCE_GROUPS = 0x00000200
 
 
 def _include(flags: int) -> bool:
@@ -38,7 +40,7 @@ def _dedupe(*sublists: list[str]) -> list[str]:
             if value not in seen:
                 seen.add(value)
                 unique.append(value)
-                if len(unique) > MAX_PAC_ENTRIES:
+                if len(unique) > MAX_GROUP_MEMBERSHIPS:
                     raise PACDecodeError("too many combined authorization groups")
     return unique
 
@@ -65,6 +67,11 @@ def decode_logon_info(data: bytes) -> dict:
     sid_count, extra_ref, resource_domain_ref, resource_count, resource_ref = (
         r.u32(), r.u32(), r.u32(), r.u32(), r.u32()
     )
+    if (sid_count or extra_ref) and not (user_flags & _NETLOGON_EXTRA_SIDS):
+        raise PACDecodeError("ExtraSids without NETLOGON_EXTRA_SIDS flag")
+    if ((resource_domain_ref or resource_count or resource_ref)
+            and not (user_flags & _NETLOGON_RESOURCE_GROUPS)):
+        raise PACDecodeError("resource groups without NETLOGON_RESOURCE_GROUPS flag")
     names = [r.unicode_value(h) for h in first_names]
     memberships = r.group_array(group_ref, group_count)
     server_name = r.unicode_value(server_name_hdr)
