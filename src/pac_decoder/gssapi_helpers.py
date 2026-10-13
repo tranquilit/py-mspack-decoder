@@ -54,7 +54,8 @@ def _attribute_value(name: object, key: str, *, required: bool) -> bytes | None:
 
 def decode_completed_context(context: object, *, errors: list[int] | None = None,
                              require_logon: bool = True,
-                             ignore_invalid_claims: bool = False) -> dict:
+                             ignore_invalid_claims: bool = False,
+                             include_resource_groups: bool = True) -> dict:
     """Decode the PAC of a completed **Kerberos acceptor** context.
     Rejects incomplete contexts, non-Kerberos mechanisms, unauthenticated or
     incomplete PAC attributes and malformed or ambiguous PAC structures.
@@ -65,6 +66,9 @@ def decode_completed_context(context: object, *, errors: list[int] | None = None
     ``ignore_invalid_claims`` can preserve valid identity and groups when an
     optional client/device claims buffer is malformed. Never authorize based
     on claims whose decoded value is None.
+    ``include_resource_groups=False`` excludes only PAC_LOGON_INFO
+    resource groups from top-level authorization lists. Device groups
+    and ExtraSids are unaffected.
     """
     if not getattr(context, "complete", False):
         raise PACAttributeError("GSSAPI security context is not complete")
@@ -86,7 +90,8 @@ def decode_completed_context(context: object, *, errors: list[int] | None = None
     upn = _attribute_value(name, "urn:mspac:upn-dns-info", required=False)
     return decode_pac(pac, upn_dns_attribute=upn,
                       errors=errors, strict=True, require_logon=require_logon,
-                      ignore_invalid_claims=ignore_invalid_claims)
+                      ignore_invalid_claims=ignore_invalid_claims,
+                      include_resource_groups=include_resource_groups)
 
 
 __all__ = ["PACAttributeError", "decode_completed_context"]

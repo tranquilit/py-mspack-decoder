@@ -1,6 +1,6 @@
 """Specialized NDR32 decoders for PAC_LOGON_INFO and PAC_DEVICE_INFO."""
 
-from .binary import PACDecodeError, filetime_to_iso, MAX_PAC_ENTRIES, MAX_GROUP_MEMBERSHIPS
+from .binary import PACDecodeError, filetime_to_iso, MAX_PAC_ENTRIES, MAX_GROUP_MEMBERSHIPS, MAX_SID_SUBAUTHS
 from .ndr import ndr_serialized_pointer
 
 _ENABLED = 0x00000004
@@ -17,6 +17,12 @@ def _valid_rid(rid: int) -> bool:
     return 0 < rid <= 0xFFFFFFFF
 
 
+def _append_rid(domain_sid: str, rid: int) -> str:
+    if domain_sid.count("-") >= MAX_SID_SUBAUTHS + 2:
+        raise PACDecodeError("SID exceeds maximum subauthorities after appending RID")
+    return f"{domain_sid}-{rid}"
+
+
 def _rid_sids(domain_sid: str | None, memberships: list[tuple[int, int]]) -> list[str]:
     if not domain_sid:
         if memberships:
@@ -24,6 +30,8 @@ def _rid_sids(domain_sid: str | None, memberships: list[tuple[int, int]]) -> lis
         return []
     if any(not _valid_rid(rid) for rid, _ in memberships):
         raise PACDecodeError("invalid group RID")
+    if memberships and domain_sid.count("-") >= MAX_SID_SUBAUTHS + 2:
+        raise PACDecodeError("SID exceeds maximum subauthorities after appending RID")
     return [f"{domain_sid}-{rid}" for rid, flags in memberships
             if _include(flags)]
 
@@ -45,12 +53,18 @@ def _dedupe(*sublists: list[str]) -> list[str]:
     return unique
 
 
-def decode_logon_info(data: bytes) -> dict:
+def decode_logon_info(data: bytes, *, include_resource_groups: bool = True) -> dict:
     """Decode KERB_VALIDATION_INFO, returning *no* session keys or secrets.
 
     Results must only be used for authorization if the enclosing GSSAPI PAC
     attribute was authenticated and this function returned successfully.
+    ``group_memberships`` preserves raw per-entry attributes; ``groups`` is
+    the filtered authorization list. The primary group has no PAC attributes.
+    ``include_resource_groups=False`` filters only ResourceGroupIds from
+    ``groups`` and ``resource_groups``, not ``extra_sids`` or raw metadata.
     """
+    if type(include_resource_groups) is not bool:
+        raise TypeError("include_resource_groups must be a boolean")
     r = ndr_serialized_pointer(data)
     dates = [r.filetime() for _ in range(6)]
     first_names = [r.unicode_header() for _ in range(6)]
@@ -97,23 +111,26 @@ def decode_logon_info(data: bytes) -> dict:
     group_extras = extra_entries[1:] if rid == 0 else extra_entries
     extra_sids = _dedupe(_extra_sids(group_extras))
     resource_groups = _dedupe(_rid_sids(resource_domain_sid, resource_entries))
-    primary_sid = f"{domain_sid}-{primary_gid}" if domain_sid and _valid_rid(primary_gid) else None
-    user_sid = f"{domain_sid}-{rid}" if domain_sid and _valid_rid(rid) else None
+    primary_sid = _append_rid(domain_sid, primary_gid)
+    user_sid = _append_rid(domain_sid, rid) if _valid_rid(rid) else None
     if rid == 0 and extra_entries:
         user_sid = account_extra
     if not user_sid:
         raise PACDecodeError("LOGON_INFO missing account SID")
     groups = _dedupe(
-        [primary_sid] if primary_sid else [], normal_groups, extra_sids, resource_groups
+        [primary_sid], normal_groups, extra_sids,
+        resource_groups if include_resource_groups else []
     )
     denied = {f"{domain_sid}-{item}" for item, flags in memberships
               if domain_sid and flags & _DENY_ONLY}
     denied.update(sid for sid, flags in group_extras if sid and flags & _DENY_ONLY)
-    denied.update(f"{resource_domain_sid}-{item}" for item, flags in resource_entries
-                  if resource_domain_sid and flags & _DENY_ONLY)
+    if include_resource_groups:
+        denied.update(f"{resource_domain_sid}-{item}" for item, flags in resource_entries
+                      if resource_domain_sid and flags & _DENY_ONLY)
     groups = [sid for sid in groups if sid not in denied]
     extra_sids = [sid for sid in extra_sids if sid not in denied]
-    resource_groups = [sid for sid in resource_groups if sid not in denied]
+    resource_groups = ([sid for sid in resource_groups if sid not in denied]
+                       if include_resource_groups else [])
     return {
         "sid": user_sid,
         "sam_name": names[0],
@@ -127,6 +144,14 @@ def decode_logon_info(data: bytes) -> dict:
         "home_directory": names[4],
         "home_drive": names[5],
         "groups": groups,
+        "group_memberships": (
+            [{"sid": f"{domain_sid}-{group_rid}", "attributes": attrs,
+              "source": "account_domain"} for group_rid, attrs in memberships]
+            + [{"sid": sid, "attributes": attrs, "source": "extra"}
+               for sid, attrs in group_extras]
+            + [{"sid": f"{resource_domain_sid}-{group_rid}", "attributes": attrs,
+                "source": "resource"} for group_rid, attrs in resource_entries]
+        ),
         "primary_group_rid": primary_gid,
         "extra_sids": extra_sids,
         "resource_groups": resource_groups,
@@ -172,8 +197,8 @@ def decode_device_info(data: bytes) -> dict:
     group_sids = _rid_sids(domain_sid, normal)
     extra_sids = _dedupe(_extra_sids(extras))
     resource_sids = _dedupe(*[_rid_sids(sid, groups) for sid, groups in domains])
-    primary_sid = f"{domain_sid}-{primary_gid}" if domain_sid and _valid_rid(primary_gid) else None
-    device_sid = f"{domain_sid}-{rid}" if domain_sid and _valid_rid(rid) else None
+    primary_sid = _append_rid(domain_sid, primary_gid)
+    device_sid = _append_rid(domain_sid, rid)
     return {
         "sid": device_sid,
         "rid": rid,
@@ -181,6 +206,15 @@ def decode_device_info(data: bytes) -> dict:
         "primary_group_rid": primary_gid,
         "extra_sids": extra_sids,
         "resource_groups": resource_sids,
+        "group_memberships": (
+            [{"sid": f"{domain_sid}-{group_rid}", "attributes": attrs,
+              "source": "account_domain"} for group_rid, attrs in normal]
+            + [{"sid": sid, "attributes": attrs, "source": "extra"}
+               for sid, attrs in extras]
+            + [{"sid": f"{resource_domain_sid}-{group_rid}", "attributes": attrs,
+                "source": "resource"} for resource_domain_sid, entries in domains
+               for group_rid, attrs in entries]
+        ),
         "groups": _dedupe(
             [primary_sid] if primary_sid else [], group_sids, extra_sids, resource_sids
         ),

@@ -34,7 +34,7 @@ _IGNORABLE_DUPLICATE_TYPES = frozenset({
 _EMPTY = (
     "sid", "sam_name", "upn", "dns_domain", "upn_dns_flags", "upn_constructed",
     "rid", "domain_sid", "domain_name", "logon_server", "full_name",
-    "groups", "primary_group_rid", "extra_sids", "resource_groups",
+    "groups", "group_memberships", "primary_group_rid", "extra_sids", "resource_groups",
     "group_count", "account_flags", "user_flags", "sub_auth_status",
     "last_logon", "last_successful_logon", "last_failed_logon",
     "logoff_time", "kickoff_time", "password_last_set",
@@ -74,7 +74,8 @@ def _same_upn_info(left: dict, right: dict) -> bool:
 def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
                *, errors: list[int] | None = None, strict: bool = True,
                require_logon: bool = False,
-               ignore_invalid_claims: bool = False) -> dict:
+               ignore_invalid_claims: bool = False,
+               include_resource_groups: bool = True) -> dict:
     """Decode a raw MS-PAC as a dictionary; **does not authenticate it**.
     In strict mode (default), malformed recognized buffers, conflicting
     identity buffers, and missing/invalid LOGON_INFO (when
@@ -96,10 +97,15 @@ def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
     malformed optional client/device claims (types 13 and 15) are skipped,
     never identity, logon, group, or other buffers. Missing claims must not
     be treated as successful claims-based authorization.
+    ``include_resource_groups=False`` excludes only PAC_LOGON_INFO
+    resource groups from top-level ``groups`` and ``resource_groups``.
+    It does not change raw ``group_memberships``, PAC_DEVICE_INFO, or
+    ``extra_sids`` (which may contain resource-domain SIDs).
     """
     if (type(strict) is not bool or type(require_logon) is not bool
-            or type(ignore_invalid_claims) is not bool):
-        raise TypeError("strict, require_logon and ignore_invalid_claims must be booleans")
+            or type(ignore_invalid_claims) is not bool
+            or type(include_resource_groups) is not bool):
+        raise TypeError("PAC decoder options must be booleans")
     pac = parse_pac(raw_pac)
     info = empty_pac_info()
     info["pac_size"] = pac.size
@@ -158,7 +164,7 @@ def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
             continue
         try:
             if t == 1:
-                logon = decode_logon_info(data)
+                logon = decode_logon_info(data, include_resource_groups=include_resource_groups)
                 if not logon.get("sid") or not isinstance(logon.get("groups"), list):
                     raise PACDecodeError("LOGON_INFO missing account SID or group list")
                 if info["sid"] is not None and info["sid"] != logon["sid"]:
@@ -198,7 +204,7 @@ def decode_pac(raw_pac: bytes, upn_dns_attribute: bytes | None = None,
             # In diagnostic mode, never leak authorization identity from an
             # invalid LOGON_INFO (even if UPN_DNS_INFO was decoded earlier).
             if t == 1:
-                for field in ("groups", "extra_sids", "resource_groups", "group_count"):
+                for field in ("groups", "group_memberships", "extra_sids", "resource_groups", "group_count"):
                     info[field] = None
     if require_logon and (1 not in buffers or info["sid"] is None or info["groups"] is None):
         raise PACDecodeError("valid PAC LOGON_INFO required")
