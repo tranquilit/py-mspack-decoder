@@ -4,17 +4,7 @@ Pure-Python decoder for Microsoft Kerberos PAC structures, including compressed 
 
 **AI-assisted development:** Most of the implementation was written with AI coding tools under human direction. It has not undergone an independent security audit.
 
-## Install
 
-```bash
-pip install py-mspack-decoder
-```
-
-For the Flask/GSSAPI example, install `flask` and the optional GSSAPI dependency:
-
-```bash
-pip install 'py-mspack-decoder[gssapi]' flask
-```
 
 ## Minimal Flask + Kerberos example
 
