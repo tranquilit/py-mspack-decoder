@@ -4,13 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-mspack-decoder"
-version = "0.1.2"
+version = "0.1.3"
 description = "Pure-Python Microsoft Kerberos PAC decoder"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [{ name = "Simon Fonteneau" }]
 dependencies = []
+
+maintainers = [
+    { name = "Tranquil IT" }
+]
+
+keywords = [
+    "kerberos",
+    "pac",
+    "active-directory",
+    "decoder",
+    "security"
+]
 
 [project.optional-dependencies]
 gssapi = ["gssapi>=1.8"]
